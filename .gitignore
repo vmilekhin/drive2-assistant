@@ -9,6 +9,11 @@ data/articles/
 data/candidates/
 articles_map.json
 my_urls.txt
+heating_seats_all.txt
+
+# Тестовые / устаревшие скрипты
+playwright_test.py
+collect_urls.py
 
 # Векторная БД
 chroma_db/
