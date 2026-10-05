@@ -1,0 +1,29 @@
+# Виртуальное окружение
+.venv/
+__pycache__/
+*.pyc
+
+# Данные (слишком большие для Git)
+data/raw/
+data/articles/
+data/candidates/
+articles_map.json
+my_urls.txt
+
+# Векторная БД
+chroma_db/
+
+# Модели
+*.pth
+*.pt
+
+# Кэш
+.pytest_cache/
+.cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
