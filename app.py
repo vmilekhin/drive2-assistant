@@ -1,5 +1,6 @@
 """Streamlit-интерфейс Drive2-assistant."""
 
+import re
 import time
 from pathlib import Path
 
@@ -17,7 +18,6 @@ CHROMA_DIR = "chroma_db"
 EMBED_MODEL = "intfloat/multilingual-e5-small"
 TOP_K = 7
 
-# Доступные модели: быстрая / качественная
 MODELS = {
     "⚡ Быстро (Qwen2.5:3b)": {
         "name": "qwen2.5:3b",
@@ -34,13 +34,14 @@ MODELS = {
 COLLECTIONS = {
     "📚 Все статьи Drive2 (зимние шины)": "drive2_articles",
     "🔥 Подогрев сидений": "heating_seats",
-    "🔋 АКБ для Kia Rio 4G": "akb_kia_rio",  # создадим позже, пока нет — не покажется
+    "🔋 АКБ для Kia Rio 4G": "akb_kia_rio",
 }
 
 SYSTEM_PROMPT = """Ты — экспертный ассистент по автомобильной тематике, работающий с базой статей Drive2.ru.
 
-КРИТИЧЕСКИ ВАЖНО:
+🛑 КРИТИЧЕСКИ ВАЖНО:
 - Отвечай ТОЛЬКО на русском языке.
+- НИКОГДА не используй китайские иероглифы, английские слова без перевода, любые другие языки.
 - Не повторяйся.
 
 ФОРМАТ ОТВЕТА:
@@ -55,6 +56,7 @@ SYSTEM_PROMPT = """Ты — экспертный ассистент по авт�
 4. Без LaTeX. Без формул.
 5. Кратко. Максимум 250 слов.
 6. Конкретные детали: размеры, модели, цены.
+7. Пиши правильно: "Michelin" (не "Мишельен"), "Nokian" (не "Нокиан"), "Hankook" (не "Ханкук").
 """
 
 EXAMPLE_QUESTIONS = {
@@ -103,6 +105,15 @@ def get_available_collections():
 
 
 # ---------------------------------------------------------------------------
+# Callback для примеров вопросов
+# ---------------------------------------------------------------------------
+
+def set_question(question: str) -> None:
+    """Записывает текст вопроса в session_state до создания виджета."""
+    st.session_state.query_input = question
+
+
+# ---------------------------------------------------------------------------
 # Поиск и генерация
 # ---------------------------------------------------------------------------
 
@@ -142,6 +153,7 @@ def build_context(chunks):
 
 
 def ask(collection, model, query: str, ollama_model: str, num_predict: int):
+    """RAG-запрос с выбранной моделью и лимитом токенов."""
     chunks = retrieve(collection, model, query, TOP_K)
 
     context = build_context(chunks)
@@ -165,7 +177,18 @@ def ask(collection, model, query: str, ollama_model: str, num_predict: int):
         },
     )
 
-    return response["message"]["content"], chunks
+    # Постобработка: убираем китайские иероглифы и мусор
+    answer = response["message"]["content"]
+    answer = re.sub(
+        r"[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]+",
+        "",
+        answer,
+    )
+    answer = re.sub(r"[ \t]+", " ", answer)
+    answer = re.sub(r"\n{3,}", "\n\n", answer)
+    answer = "\n".join(line.rstrip() for line in answer.split("\n"))
+
+    return answer.strip(), chunks
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +207,10 @@ st.markdown(
     "аналитический ответ на основе опыта реальных автовладельцев."
 )
 
+# Инициализация session_state
+if "query_input" not in st.session_state:
+    st.session_state.query_input = ""
+
 # Sidebar
 with st.sidebar:
     st.header("⚙️ Настройки")
@@ -199,7 +226,6 @@ with st.sidebar:
     )
     collection_name = available[collection_label]
 
-    # Информация о коллекции
     client = get_chroma_client()
     collection = client.get_collection(collection_name)
     st.info(f"**Чанков в базе:** {collection.count()}")
@@ -213,7 +239,6 @@ with st.sidebar:
         "4. Указываются источники."
     )
 
-    st.divider()
     st.divider()
     st.subheader("🤖 Модель LLM")
 
@@ -246,7 +271,11 @@ with col1:
 with col2:
     st.write("")
     st.write("")
-    ask_button = st.button("🔍 Спросить", type="primary", use_container_width=True)
+    ask_button = st.button(
+        "🔍 Спросить",
+        type="primary",
+        use_container_width=True,
+    )
 
 # Примеры вопросов
 st.markdown("**Примеры вопросов:**")
@@ -254,13 +283,16 @@ examples = EXAMPLE_QUESTIONS.get(collection_name, [])
 if examples:
     cols = st.columns(len(examples))
     for i, ex in enumerate(examples):
-        if cols[i].button(ex, key=f"ex_{i}"):
-            st.session_state["query_input"] = ex
-            st.rerun()
+        cols[i].button(
+            ex,
+            key=f"ex_{i}",
+            on_click=set_question,
+            args=(ex,),
+        )
 
 # Обработка вопроса
 if (ask_button or query) and query.strip():
-    with st.spinner("Ищу ответ в статьях..."):
+    with st.spinner(f"Ищу ответ в статьях... ({ollama_model})"):
         t0 = time.time()
         model = load_embed_model()
         answer, chunks = ask(
@@ -269,7 +301,7 @@ if (ask_button or query) and query.strip():
             query,
             ollama_model=ollama_model,
             num_predict=num_predict,
-        )        
+        )
         elapsed = time.time() - t0
 
     st.divider()
