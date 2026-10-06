@@ -4,11 +4,10 @@ __pycache__/
 *.pyc
 
 # Данные (слишком большие для Git)
-data/raw/
-data/articles/
-data/candidates/
+data/
 articles_map.json
 my_urls.txt
+AKB_Kia_Rio_all.txt
 heating_seats_all.txt
 
 # Тестовые / устаревшие скрипты

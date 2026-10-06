@@ -1,6 +1,7 @@
 # search.py
-"""RAG-поиск по статьям Drive2 через ChromaDB + Ollama."""
+"""RAG-поиск по статьям Drive2 через ChromaDB + Ollama (qwen2.5:7b)."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -8,27 +9,42 @@ import chromadb
 import ollama
 from sentence_transformers import SentenceTransformer
 
-import config
 
+# ---------------------------------------------------------------------------
+# Настройки
+# ---------------------------------------------------------------------------
 
 CHROMA_DIR = "chroma_db"
 COLLECTION_NAME = "drive2_articles"
 EMBED_MODEL = "intfloat/multilingual-e5-small"
-OLLAMA_MODEL = "qwen2.5:3b"
+OLLAMA_MODEL = "qwen2.5:7b"
 
-TOP_K = 5
+TOP_K = 7
+SHOW_DEBUG = os.getenv("DEBUG", "0") == "1"  # включается: DEBUG=1 python search.py
 
 
-SYSTEM_PROMPT = """Ты — ассистент по автомобильной тематике.
-Отвечай на вопрос пользователя, опираясь на фрагменты статей и комментариев с Drive2.ru.
+SYSTEM_PROMPT = """Ты — экспертный ассистент по автомобильной тематике, работающий с базой статей и комментариев Drive2.ru.
 
-Правила:
-1. Если в источниках есть информация — дай развёрнутый ответ, используя конкретные детали: марки, модели, размеры, мнения.
-2. Если информации действительно нет — кратко скажи: "В найденных источниках нет прямого ответа, но можно отметить..." и процитируй, что есть близкого.
-3. Если источники противоречат друг другу — упомяни это: "мнения авторов расходятся".
-4. НЕ выдумывай факты, которых нет в источниках. Но и не бойся делать выводы на основе того, что есть.
-5. Отвечай на русском, по делу, без воды.
+Твоя задача — синтезировать ответ из реального опыта автовладельцев.
+
+ФОРМАТ ОТВЕТА:
+📋 КРАТКИЙ ВЫВОД — 1-2 предложения
+🛞 КОНКРЕТИКА — модели, размеры, характеристики, артикулы (если упомянуты)
+⚠️ ВАЖНО ЗНАТЬ — нюансы, противоречия, предупреждения
+
+ПРАВИЛА:
+1. Опирайся ТОЛЬКО на предоставленные фрагменты. Не выдумывай факты.
+2. Если мнения противоречат — скажи: "мнения авторов расходятся".
+3. Если информации мало — честно: "в найденных статьях нет прямого ответа".
+4. НЕ используй LaTeX, формулы, длинные списки.
+5. Пиши кратко и по делу. Максимум 300 слов.
+6. Указывай конкретные детали: размеры шин (185/65 R15), цены, модели.
 """
+
+
+# ---------------------------------------------------------------------------
+# Инициализация
+# ---------------------------------------------------------------------------
 
 def load_collection():
     client = chromadb.PersistentClient(path=CHROMA_DIR)
@@ -37,7 +53,6 @@ def load_collection():
 
 def retrieve(collection, model, query: str, k: int = TOP_K):
     """Находит top-k чанков по запросу."""
-    # e5-модель требует префикс "query: " для поисковых запросов
     q_emb = model.encode([f"query: {query}"])[0].tolist()
 
     results = collection.query(
@@ -77,19 +92,34 @@ def build_context(chunks: list[dict]) -> str:
     return "\n\n" + ("=" * 60) + "\n\n".join(parts)
 
 
+def clean_answer(text: str) -> str:
+    """Убирает LaTeX и лишние переносы."""
+    import re
+    text = re.sub(r"\\\[.*?\\\]", "", text, flags=re.DOTALL)
+    text = re.sub(r"\\\(.*?\\\)", "", text, flags=re.DOTALL)
+    text = re.sub(r"\\boxed\{([^}]*)\}", r"\1", text)
+    text = text.replace("\\times", "×").replace("\\cdot", "·")
+    text = re.sub(r"\\[a-zA-Z]+", "", text)
+    text = re.sub(r"\$\$.*?\$\$", "", text, flags=re.DOTALL)
+    text = re.sub(r"\$([^$]*)\$", r"\1", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = "\n".join(line.rstrip() for line in text.split("\n"))
+    return text.strip()
+
+
 def ask(collection, model, query: str) -> tuple[str, list[dict]]:
     """Возвращает (ответ LLM, использованные источники)."""
     chunks = retrieve(collection, model, query, TOP_K)
 
-    # --- ОТЛАДКА: показываем найденные чанки ---
-    print("\n" + "-" * 60)
-    print("НАЙДЕННЫЕ ЧАНКИ (для отладки):")
-    print("-" * 60)
-    for i, c in enumerate(chunks, 1):
-        print(f"\n[{i}] {c['title']} (distance: {c['distance']:.3f})")
-        print(f"    {c['text'][:200]}...")
-    print("-" * 60 + "\n")
-    # --- конец отладки ---
+    # Отладка — только если DEBUG=1
+    if SHOW_DEBUG:
+        print("\n" + "-" * 60)
+        print("НАЙДЕННЫЕ ЧАНКИ (для отладки):")
+        print("-" * 60)
+        for i, c in enumerate(chunks, 1):
+            print(f"\n[{i}] {c['title']} (distance: {c['distance']:.3f})")
+            print(f"    {c['text'][:200]}...")
+        print("-" * 60 + "\n")
 
     context = build_context(chunks)
     user_prompt = (
@@ -111,7 +141,11 @@ def ask(collection, model, query: str) -> tuple[str, list[dict]]:
         },
     )
 
-    answer = response["message"]["content"]
+    answer = clean_answer(response["message"]["content"])
+
+    if not answer:
+        answer = "Не удалось сгенерировать ответ. Попробуйте переформулировать."
+
     return answer, chunks
 
 
@@ -136,6 +170,8 @@ def main() -> None:
     print("Загружаю ChromaDB...")
     collection = load_collection()
     print(f"В коллекции: {collection.count()} чанков")
+    print(f"Модель LLM: {OLLAMA_MODEL}")
+    print(f"TOP_K: {TOP_K}")
 
     print("\n" + "=" * 60)
     print("Drive2-assistant готов. Введите 'выход' для завершения.")
