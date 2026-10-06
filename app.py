@@ -16,17 +16,18 @@ from sentence_transformers import SentenceTransformer
 
 CHROMA_DIR = "chroma_db"
 EMBED_MODEL = "intfloat/multilingual-e5-small"
-TOP_K = 7
 
 MODELS = {
     "⚡ Быстро (Qwen2.5:3b)": {
         "name": "qwen2.5:3b",
-        "num_predict": 400,
-        "description": "15–30 сек на ответ, качество базовое",
+        "num_predict": 350,
+        "top_k": 4,
+        "description": "20–40 сек на ответ, качество базовое",
     },
     "🎯 Качественно (Qwen2.5:7b)": {
         "name": "qwen2.5:7b",
         "num_predict": 500,
+        "top_k": 7,
         "description": "1–3 мин на ответ, качество выше",
     },
 }
@@ -117,7 +118,8 @@ def set_question(question: str) -> None:
 # Поиск и генерация
 # ---------------------------------------------------------------------------
 
-def retrieve(collection, model, query: str, k: int = TOP_K):
+def retrieve(collection, model, query: str, k: int):
+    """Ищет top-k чанков по запросу."""
     q_emb = model.encode([f"query: {query}"])[0].tolist()
 
     results = collection.query(
@@ -142,6 +144,7 @@ def retrieve(collection, model, query: str, k: int = TOP_K):
 
 
 def build_context(chunks):
+    """Собирает контекст для LLM."""
     parts = []
     for i, c in enumerate(chunks, 1):
         parts.append(
@@ -152,9 +155,16 @@ def build_context(chunks):
     return "\n\n" + ("=" * 60) + "\n\n".join(parts)
 
 
-def ask(collection, model, query: str, ollama_model: str, num_predict: int):
-    """RAG-запрос с выбранной моделью и лимитом токенов."""
-    chunks = retrieve(collection, model, query, TOP_K)
+def ask(
+    collection,
+    model,
+    query: str,
+    ollama_model: str,
+    num_predict: int,
+    top_k: int,
+):
+    """RAG-запрос с выбранной моделью, лимитом токенов и TOP_K."""
+    chunks = retrieve(collection, model, query, top_k)
 
     context = build_context(chunks)
     user_prompt = (
@@ -250,13 +260,14 @@ with st.sidebar:
     model_config = MODELS[model_label]
     ollama_model = model_config["name"]
     num_predict = model_config["num_predict"]
+    top_k = model_config["top_k"]
 
     st.caption(f"ℹ️ {model_config['description']}")
 
     st.divider()
     st.caption(f"Модель: `{ollama_model}`")
     st.caption(f"Эмбеддинги: `{EMBED_MODEL}`")
-    st.caption(f"TOP_K: {TOP_K}")
+    st.caption(f"TOP_K: {top_k}")
 
 # Основная область
 col1, col2 = st.columns([3, 1])
@@ -301,6 +312,7 @@ if (ask_button or query) and query.strip():
             query,
             ollama_model=ollama_model,
             num_predict=num_predict,
+            top_k=top_k,
         )
         elapsed = time.time() - t0
 
