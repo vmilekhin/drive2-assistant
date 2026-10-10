@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Drive2 AI-помощник (proof of concept)",
+  "version": "1.0.0",
+  "description": "AI-помощник по статьям Drive2. Proof of concept.",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.drive2.ru/*",
+        "https://drive2.ru/*"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "host_permissions": [
+    "https://www.drive2.ru/*",
+    "http://localhost:8501/*"
+  ]
+}

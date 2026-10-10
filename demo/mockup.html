@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Drive2 с AI-помощником — макет</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+         background: #f0f2f5; color: #222; }
+
+  .top-bar {
+    background: #1c5d99; color: white; padding: 8px 40px;
+    font-size: 13px; display: flex; justify-content: space-between;
+  }
+  .top-bar a { color: white; text-decoration: none; margin-left: 20px; }
+
+  .header {
+    background: white; padding: 15px 40px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  .search-row {
+    display: flex; gap: 12px; align-items: center;
+    max-width: 1100px; margin: 0 auto;
+  }
+  .logo {
+    font-size: 26px; font-weight: 900; color: #1c5d99;
+    letter-spacing: -1px; margin-right: 20px; white-space: nowrap;
+  }
+  .search-input {
+    flex: 1; padding: 12px 18px; border: 2px solid #e0e0e0;
+    border-radius: 10px; font-size: 15px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-input:focus { border-color: #1c5d99; }
+  .btn-search {
+    padding: 12px 24px; background: #1c5d99; color: white;
+    border: none; border-radius: 10px; cursor: pointer;
+    font-size: 15px; font-weight: 600; white-space: nowrap;
+  }
+  .btn-search:hover { background: #164a7a; }
+
+  .btn-ai {
+    padding: 12px 20px;
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+    color: white; border: none; border-radius: 10px; cursor: pointer;
+    font-size: 15px; font-weight: 700; white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(106, 17, 203, 0.35);
+    transition: transform 0.15s, box-shadow 0.15s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .btn-ai:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(106, 17, 203, 0.5);
+  }
+  .btn-ai:active { transform: translateY(0); }
+
+  .nav {
+    background: white; padding: 0 40px;
+    border-bottom: 1px solid #eaeaea;
+    display: flex; gap: 30px;
+  }
+  .nav a {
+    padding: 15px 0; color: #333; text-decoration: none;
+    font-size: 14px; font-weight: 500;
+    border-bottom: 2px solid transparent;
+  }
+  .nav a:hover { border-bottom-color: #1c5d99; color: #1c5d99; }
+
+  .content {
+    max-width: 1100px; margin: 30px auto;
+    padding: 0 20px;
+    display: grid; grid-template-columns: 2fr 1fr; gap: 25px;
+  }
+  .card {
+    background: white; padding: 20px; border-radius: 10px;
+    margin-bottom: 15px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .card h3 { margin-bottom: 10px; color: #1c5d99; font-size: 17px; }
+  .card p { font-size: 14px; color: #555; line-height: 1.5; }
+  .card .meta { font-size: 12px; color: #999; margin-top: 10px; }
+
+  /* МОДАЛЬНОЕ ОКНО */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    padding: 40px 20px;
+    animation: fadeIn 0.2s ease;
+  }
+  .modal-backdrop.active { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .modal-content {
+    background: white;
+    border-radius: 14px;
+    max-width: 1000px;
+    height: calc(100vh - 80px);
+    margin: 0 auto;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    animation: slideUp 0.25s ease;
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 22px;
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+    color: white;
+  }
+
+  .modal-header h2 {
+    font-size: 17px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .modal-close {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    border-radius: 50%;
+    width: 34px;
+    height: 34px;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    transition: background 0.15s;
+  }
+  .modal-close:hover { background: rgba(255, 255, 255, 0.35); }
+
+  .modal-iframe {
+    width: 100%;
+    height: calc(100% - 60px);
+    border: none;
+    display: block;
+  }
+
+  .modal-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: calc(100% - 60px);
+    flex-direction: column;
+    gap: 15px;
+    color: #666;
+    font-size: 15px;
+  }
+
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #eee;
+    border-top-color: #6a11cb;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div>Сообщество автомобилистов</div>
+  <div>
+    <a href="#">Помощь</a>
+    <a href="#">Вход</a>
+    <a href="#">Регистрация</a>
+  </div>
+</div>
+
+<div class="header">
+  <div class="search-row">
+    <div class="logo">DRIVE2</div>
+    <input class="search-input" type="text"
+           placeholder="Поиск по Drive2...">
+    <button class="btn-search">Найти</button>
+    <button class="btn-ai" onclick="openAI()">
+      <span>🤖</span>
+      <span>AI-помощник</span>
+    </button>
+  </div>
+</div>
+
+<div class="nav">
+  <a href="#">Лента</a>
+  <a href="#">Сообщества</a>
+  <a href="#">Бортжурналы</a>
+  <a href="#">Помощь на дороге</a>
+  <a href="#">Магазин</a>
+</div>
+
+<div class="content">
+  <div>
+    <div class="card">
+      <h3>Зимние шины на Kia Rio: что выбрать</h3>
+      <p>Обзор популярных моделей зимних шин для Kia Rio 4 поколения.
+         Реальный опыт эксплуатации, размеры, цены.</p>
+      <div class="meta">Автор: IvanIvanov · 42 комментария</div>
+    </div>
+    <div class="card">
+      <h3>Замена аккумулятора своими руками</h3>
+      <p>Пошаговая инструкция по замене АКБ на Kia Rio.
+         Какой аккумулятор выбрать, где купить, как установить.</p>
+      <div class="meta">Автор: SergeyK · 28 комментариев</div>
+    </div>
+    <div class="card">
+      <h3>Подогрев сидений после автозапуска</h3>
+      <p>Перепрошивка блока управления подогревом, чтобы
+         сохранять настройки после запуска двигателя.</p>
+      <div class="meta">Автор: VictorM · 78 комментариев</div>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h3>Популярное</h3>
+      <p>Топ-10 статей этой недели</p>
+    </div>
+    <div class="card">
+      <h3>Мои подписки</h3>
+      <p>Обновления от авторов</p>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛЬНОЕ ОКНО С AI -->
+<div class="modal-backdrop" id="aiModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>
+        <span>🤖</span>
+        <span>AI-помощник Drive2</span>
+      </h2>
+      <button class="modal-close" onclick="closeAI()">✕</button>
+    </div>
+
+    <!-- Заглушка с загрузкой -->
+    <div class="modal-loading" id="aiLoading">
+      <div class="spinner"></div>
+      <div>Загружаю AI-помощника...</div>
+      <div style="font-size: 13px; color: #999;">
+        Если долго — убедитесь, что Streamlit запущен
+      </div>
+    </div>
+
+    <!-- Сам iframe со Streamlit -->
+    <iframe
+      id="aiIframe"
+      class="modal-iframe"
+      style="display: none;"
+      src="about:blank"
+      title="AI-помощник Drive2">
+    </iframe>
+  </div>
+</div>
+
+<script>
+  const STREAMLIT_URL = 'http://localhost:8501';
+
+  function openAI() {
+    const modal = document.getElementById('aiModal');
+    const iframe = document.getElementById('aiIframe');
+    const loading = document.getElementById('aiLoading');
+
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+
+    // Показываем загрузку
+    loading.style.display = 'flex';
+    iframe.style.display = 'none';
+
+    // Загружаем Streamlit
+    iframe.src = STREAMLIT_URL;
+
+    iframe.onload = function() {
+      setTimeout(function() {
+        loading.style.display = 'none';
+        iframe.style.display = 'block';
+      }, 500);
+    };
+  }
+
+  function closeAI() {
+    const modal = document.getElementById('aiModal');
+    const iframe = document.getElementById('aiIframe');
+
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
+
+    // Останавливаем iframe, чтобы не занимал ресурсы
+    setTimeout(function() {
+      iframe.src = 'about:blank';
+    }, 300);
+  }
+
+  // Закрытие по Escape
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeAI();
+  });
+
+  // Закрытие по клику на фон
+  document.getElementById('aiModal').addEventListener('click', function(e) {
+    if (e.target === this) closeAI();
+  });
+</script>
+
+</body>
+</html>
